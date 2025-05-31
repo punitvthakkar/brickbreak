@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Joy Brickbreaker</title>
+    <style>
+        /* General body styling */
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrolling */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Full viewport height */
+            background-color: #1a1a2e; /* Dark background */
+            font-family: 'Inter', sans-serif; /* Modern font */
+            color: #fff;
+            -webkit-user-select: none; /* Disable text selection on touch devices */
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            touch-action: none; /* Prevent default touch actions like scrolling/zooming */
+        }
+
+        /* Game container to enforce aspect ratio and center content */
+        .game-container {
+            position: relative;
+            width: 100vw; /* Maximize width */
+            height: 100vh; /* Maximize height */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* Enforce portrait mode visually for wider screens */
+            max-width: calc(100vh * (9 / 16)); /* Example: 9:16 aspect ratio */
+            max-height: calc(100vw * (16 / 9));
+            background-color: #2a2a4a; /* Slightly lighter background for game area */
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            overflow: hidden; /* Ensure nothing spills out */
+        }
+
+        /* Canvas styling */
+        canvas {
+            display: block;
+            background-color: transparent; /* Background handled by JS */
+            border-radius: 10px;
+            touch-action: none; /* Prevent default touch actions */
+        }
+
+        /* UI elements */
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none; /* Allow clicks to pass through by default */
+            z-index: 10;
+        }
+
+        .top-ui {
+            width: 90%;
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            color: #e0f7fa;
+        }
+
+        .lives-display {
+            display: flex;
+            gap: 5px;
+        }
+
+        .life-icon {
+            width: 25px;
+            height: 25px;
+            background-color: #ff5252; /* Red for lives */
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(255, 82, 82, 0.7);
+            transition: transform 0.2s ease-out;
+        }
+
+        .life-icon.lost {
+            background-color: #555; /* Grey for lost lives */
+            box-shadow: none;
+        }
+
+        .game-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 20;
+            pointer-events: auto; /* Enable clicks on screen */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+            border-radius: 15px; /* Match game container */
+        }
+
+        .game-screen.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .game-screen h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            color: #00e676; /* Green for titles */
+            text-shadow: 0 0 15px rgba(0, 230, 118, 0.7);
+        }
+
+        .game-screen p {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #b3e5fc;
+        }
+
+        .game-screen button {
+            background-color: #00e676;
+            color: #1a1a2e;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.3em;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5);
+            transition: all 0.3s ease;
+            pointer-events: auto; /* Enable clicks on button */
+        }
+
+        .game-screen button:hover {
+            background-color: #00c853;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 230, 118, 0.7);
+        }
+
+        .game-screen button:active {
+            transform: translateY(0);
+            box-shadow: 0 3px 10px rgba(0, 230, 118, 0.5);
+        }
+
+        /* Lever control styling */
+        .lever-control {
+            position: absolute;
+            bottom: 0; /* Position at the very bottom */
+            left: 0;
+            width: 100%;
+            height: 80px; /* Sufficient height for touch */
+            background-color: rgba(0, 0, 0, 0.3); /* Semi-transparent background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto; /* Enable touch events */
+            z-index: 15; /* Above canvas, below game screens */
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+        }
+
+        .lever-indicator {
+            width: 120px; /* Visual indicator for the lever */
+            height: 15px;
+            background-color: #bbdefb; /* Light blue */
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(187, 222, 251, 0.7);
+        }
+
+        /* Responsive adjustments */
+        @media (orientation: landscape) {
+            /* For landscape mode, rotate the game container to simulate portrait */
+            .game-container {
+                width: 100vh; /* Use viewport height as width */
+                height: 100vw; /* Use viewport width as height */
+                transform: rotate(90deg);
+                transform-origin: center;
+                /* Adjust positioning if needed after rotation */
+                margin: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="ui-overlay">
+            <div class="top-ui">
+                <div id="scoreDisplay">Score: 0</div>
+                <div class="lives-display" id="livesDisplay">
+                    </div>
+            </div>
+            <div class="lever-control" id="leverControl">
+                <div class="lever-indicator"></div>
+            </div>
+        </div>
+
+        <div class="game-screen" id="startScreen">
+            <h1>Mobile Joy Brickbreaker</h1>
+            <p>High Score: <span id="highScoreStart">0</span></p>
+            <button id="startButton">Tap to Start</button>
+        </div>
+
+        <div class="game-screen" id="gameOverScreen">
+            <h1>Game Over!</h1>
+            <p>Your Score: <span id="finalScore">0</span></p>
+            <p>High Score: <span id="highScoreEnd">0</span></p>
+            <button id="restartButton">Tap to Restart</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <script>
+        // Matter.js aliases
+        const Engine = Matter.Engine;
+        const Render = Matter.Render;
+        const Runner = Matter.Runner;
+        const Bodies = Matter.Bodies;
+        const Composite = Matter.Composite;
+        const Events = Matter.Events;
+        const Body = Matter.Body;
+
+        // Game state variables
+        let engine;
+        let render;
+        let runner;
+        let canvas;
+        let ctx;
+
+        let paddle;
+        let ball;
+        let bricks = [];
+        let walls = [];
+        let ground; // Invisible body for detecting ball loss
+
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('brickbreakerHighScore')) || 0;
+        let lives = 3;
+        let currentStage = 1;
+        const MAX_STAGES = 10; // Target 10 stages
+
+        let gameRunning = false;
+        let ballLaunched = false;
+
+        // UI Elements
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const livesDisplay = document.getElementById('livesDisplay');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        const highScoreStart = document.getElementById('highScoreStart');
+        const finalScore = document.getElementById('finalScore');
+        const highScoreEnd = document.getElementById('highScoreEnd');
+        const leverControl = document.getElementById('leverControl');
+
+        // Game dimensions (will be set dynamically)
+        let gameWidth;
+        let gameHeight;
+        const PADDLE_WIDTH_RATIO = 0.25; // Paddle width as a ratio of game width
+        const PADDLE_HEIGHT = 20;
+        const BALL_RADIUS = 10;
+        const BRICK_ROWS = 5;
+        const BRICK_COLS = 7;
+        const BRICK_PADDING = 5;
+
+        // Procedural generation parameters
+        const BASE_BALL_SPEED = 8; // Initial speed magnitude
+        let currentBallSpeed = BASE_BALL_SPEED;
+
+        // Color palettes (retro/joyful inspired)
+        const PALETTES = [
+            {
+                background: ['#1a1a2e', '#2a2a4a'], // Dark blue/purple gradient
+                paddle: '#00e676', // Green
+                ball: '#ffeb3b', // Yellow
+                bricks: ['#ff5252', '#ff9800', '#ffeb3b', '#cddc39', '#00e676', '#00bcd4', '#2196f3', '#9c27b0'] // Rainbow
+            },
+            {
+                background: ['#000000', '#333333'], // Dark grey gradient
+                paddle: '#ff4081', // Pink
+                ball: '#82b1ff', // Light blue
+                bricks: ['#ff8a80', '#ea80fc', '#8c9eff', '#80d8ff', '#a7ffeb', '#ccff90', '#ffe57f', '#ffc400'] // Pastel
+            },
+            {
+                background: ['#3f000f', '#800020'], // Deep red/maroon gradient
+                paddle: '#e0f7fa', // Light cyan
+                ball: '#ffc107', // Amber
+                bricks: ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4'] // Royal colors
+            },
+            {
+                background: ['#003333', '#006666'], // Teal gradient
+                paddle: '#ff8a65', // Orange
+                ball: '#f06292', // Light pink
+                bricks: ['#64ffda', '#18ffff', '#69f0ae', '#b9f6ca', '#a7ffeb', '#84ffff', '#e0f2f7', '#b2ebf2'] // Cool tones
+            }
+        ];
+        let currentPalette;
+
+        /**
+         * Initializes the game canvas and sets up Matter.js engine.
+         */
+        function initGame() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            // Set canvas dimensions based on container
+            const gameContainer = document.querySelector('.game-container');
+            gameWidth = gameContainer.clientWidth;
+            gameHeight = gameContainer.clientHeight;
+            canvas.width = gameWidth;
+            canvas.height = gameHeight;
+
+            // Create a Matter.js engine
+            engine = Engine.create();
+            engine.gravity.y = 0; // No gravity for Brickbreaker
+
+            // Create a custom renderer for Matter.js
+            render = Render.create({
+                canvas: canvas,
+                engine: engine,
+                options: {
+                    width: gameWidth,
+                    height: gameHeight,
+                    wireframes: false, // Render solid bodies
+                    background: 'transparent' // Background handled by custom drawing
+                }
+            });
+
+            // Run the engine
+            runner = Runner.create();
+            Runner.run(runner, engine);
+
+            // Add walls to the composite
+            // Top wall
+            walls.push(Bodies.rectangle(gameWidth / 2, -10, gameWidth, 20, { isStatic: true, label: 'wall', render: { fillStyle: '#888' } }));
+            // Left wall
+            walls.push(Bodies.rectangle(-10, gameHeight / 2, 20, gameHeight, { isStatic: true, label: 'wall', render: { fillStyle: '#888' } }));
+            // Right wall
+            walls.push(Bodies.rectangle(gameWidth + 10, gameHeight / 2, 20, gameHeight, { isStatic: true, label: 'wall', render: { fillStyle: '#888' } }));
+            // Ground (invisible, for detecting ball loss)
+            ground = Bodies.rectangle(gameWidth / 2, gameHeight + 50, gameWidth, 100, { isStatic: true, label: 'ground', render: { fillStyle: 'transparent' } });
+
+            Composite.add(engine.world, walls);
+            Composite.add(engine.world, ground);
+
+            // Set up collision events
+            Events.on(engine, 'collisionStart', handleCollision);
+
+            // Start custom rendering loop
+            requestAnimationFrame(drawGame);
+        }
+
+        /**
+         * Handles collisions between game bodies.
+         * @param {object} event - The collision event from Matter.js.
+         */
+        function handleCollision(event) {
+            const pairs = event.pairs;
+
+            pairs.forEach(pair => {
+                const bodyA = pair.bodyA;
+                const bodyB = pair.bodyB;
+
+                // Ball-brick collision
+                if ((bodyA === ball && bodyB.label === 'brick') || (bodyB === ball && bodyA.label === 'brick')) {
+                    const brick = bodyA.label === 'brick' ? bodyA : bodyB;
+
+                    // Remove brick from physics world and bricks array
+                    Composite.remove(engine.world, brick);
+                    bricks = bricks.filter(b => b !== brick);
+
+                    score += 10; // Score points for breaking a brick
+                    updateScoreDisplay();
+
+                    // Check if all bricks are cleared
+                    if (bricks.length === 0) {
+                        nextStage();
+                    }
+                }
+
+                // Ball-ground collision (ball lost)
+                if ((bodyA === ball && bodyB.label === 'ground') || (bodyB === ball && bodyA.label === 'ground')) {
+                    loseLife();
+                }
+
+                // Ball-paddle collision - ensure ball velocity is maintained
+                if ((bodyA === ball && bodyB === paddle) || (bodyB === ball && bodyA === paddle)) {
+                    // Get current ball velocity magnitude
+                    const speed = Math.sqrt(ball.velocity.x * ball.velocity.x + ball.velocity.y * ball.velocity.y);
+                    // If speed is too low, boost it slightly (optional, to prevent sticking)
+                    if (speed < currentBallSpeed * 0.8) {
+                         Body.setVelocity(ball, {
+                            x: ball.velocity.x * (currentBallSpeed / speed),
+                            y: ball.velocity.y * (currentBallSpeed / speed)
+                        });
+                    }
+                }
+            });
+        }
+
+        /**
+         * Updates the score display on the UI.
+         */
+        function updateScoreDisplay() {
+            scoreDisplay.textContent = `Score: ${score}`;
+        }
+
+        /**
+         * Updates the lives display on the UI with illustrative icons.
+         */
+        function updateLivesDisplay() {
+            livesDisplay.innerHTML = ''; // Clear existing icons
+            for (let i = 0; i < 3; i++) { // Always show 3 icons for the initial design
+                const lifeIcon = document.createElement('div');
+                lifeIcon.classList.add('life-icon');
+                if (i >= lives) {
+                    lifeIcon.classList.add('lost'); // Mark as lost if life is gone
+                }
+                livesDisplay.appendChild(lifeIcon);
+            }
+        }
+
+        /**
+         * Handles losing a life.
+         */
+        function loseLife() {
+            lives--;
+            updateLivesDisplay();
+            ballLaunched = false; // Ball needs to be re-launched
+
+            if (lives <= 0) {
+                gameOver();
+            } else {
+                // Reset ball and paddle for the next life
+                resetBallAndPaddle();
+            }
+        }
+
+        /**
+         * Resets the ball and paddle to their initial positions.
+         */
+        function resetBallAndPaddle() {
+            // Remove old ball and paddle if they exist
+            if (ball) Composite.remove(engine.world, ball);
+            if (paddle) Composite.remove(engine.world, paddle);
+
+            // Create paddle
+            const paddleWidth = gameWidth * PADDLE_WIDTH_RATIO;
+            paddle = Bodies.rectangle(gameWidth / 2, gameHeight - PADDLE_HEIGHT * 2, paddleWidth, PADDLE_HEIGHT, {
+                isStatic: true, // Paddle is static and moved manually
+                label: 'paddle',
+                render: { fillStyle: currentPalette.paddle },
+                chamfer: { radius: 5 } // Rounded corners
+            });
+
+            // Create ball
+            ball = Bodies.circle(gameWidth / 2, paddle.position.y - BALL_RADIUS - 5, BALL_RADIUS, {
+                restitution: 1, // Full elasticity
+                friction: 0,
+                frictionAir: 0,
+                frictionStatic: 0,
+                inertia: Infinity, // Prevent rotation from collisions
+                label: 'ball',
+                render: { fillStyle: currentPalette.ball }
+            });
+
+            Composite.add(engine.world, [paddle, ball]);
+        }
+
+        /**
+         * Starts the game.
+         */
+        function startGame() {
+            score = 0;
+            lives = 3;
+            currentStage = 1;
+            currentBallSpeed = BASE_BALL_SPEED; // Reset ball speed
+            gameRunning = true;
+            ballLaunched = false;
+
+            hideScreens();
+            updateScoreDisplay();
+            updateLivesDisplay();
+            resetBallAndPaddle();
+            generateStage(currentStage);
+        }
+
+        /**
+         * Resets the game state and shows the start screen.
+         */
+        function resetGame() {
+            // Clear all existing bodies from the world except walls and ground
+            Composite.clear(engine.world, false);
+            Composite.add(engine.world, walls);
+            Composite.add(engine.world, ground);
+
+            bricks = []; // Clear bricks array
+            showStartScreen();
+        }
+
+        /**
+         * Handles game over logic.
+         */
+        function gameOver() {
+            gameRunning = false;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('brickbreakerHighScore', highScore);
+            }
+            finalScore.textContent = score;
+            highScoreEnd.textContent = highScore;
+            showGameOverScreen();
+        }
+
+        /**
+         * Advances to the next stage.
+         */
+        function nextStage() {
+            currentStage++;
+            if (currentStage > MAX_STAGES) {
+                // Game completed all stages, maybe a special win screen or loop back
+                alert("Congratulations! You've cleared all stages!"); // Use a modal instead of alert in real app
+                gameOver();
+                return;
+            }
+
+            // Increase ball speed subtly every few stages
+            if (currentStage % 3 === 0) {
+                currentBallSpeed += 0.5; // Small increase
+            }
+
+            // Clear existing bricks
+            bricks.forEach(brick => Composite.remove(engine.world, brick));
+            bricks = [];
+            resetBallAndPaddle(); // Reset ball and paddle for new stage
+            ballLaunched = false; // Ball needs to be re-launched for new stage
+            generateStage(currentStage);
+        }
+
+        /**
+         * Generates the bricks for a given stage.
+         * @param {number} stage - The current stage number.
+         */
+        function generateStage(stage) {
+            // Randomly select a color palette for the stage
+            currentPalette = PALETTES[Math.floor(Math.random() * PALETTES.length)];
+
+            // Clear previous bricks
+            bricks.forEach(brick => Composite.remove(engine.world, brick));
+            bricks = [];
+
+            const brickWidth = (gameWidth - (BRICK_COLS + 1) * BRICK_PADDING) / BRICK_COLS;
+            const brickHeight = 25;
+            const startY = gameHeight * 0.15; // Start bricks lower
+
+            for (let row = 0; row < BRICK_ROWS; row++) {
+                for (let col = 0; col < BRICK_COLS; col++) {
+                    // Procedural generation of brick layout
+                    // Example: Simple full rows for early stages, more complex patterns later
+                    let addBrick = true;
+                    if (stage > 1) {
+                        // Introduce some gaps
+                        if (stage % 2 === 0 && (row + col) % 2 === 0) addBrick = false; // Checkerboard pattern
+                        if (stage % 3 === 0 && (row === 0 || row === BRICK_ROWS - 1) && (col === 0 || col === BRICK_COLS - 1)) addBrick = false; // Corners missing
+                    }
+                    if (stage > 5) {
+                        // More complex: random chance to skip
+                        if (Math.random() < 0.2) addBrick = false;
+                    }
+
+
+                    if (addBrick) {
+                        const x = BRICK_PADDING + col * (brickWidth + BRICK_PADDING) + brickWidth / 2;
+                        const y = startY + row * (brickHeight + BRICK_PADDING) + brickHeight / 2;
+                        const brickColor = currentPalette.bricks[Math.floor(Math.random() * currentPalette.bricks.length)];
+                        const brick = Bodies.rectangle(x, y, brickWidth, brickHeight, {
+                            isStatic: true,
+                            label: 'brick',
+                            render: { fillStyle: brickColor },
+                            chamfer: { radius: 3 } // Rounded corners
+                        });
+                        bricks.push(brick);
+                        Composite.add(engine.world, brick);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Custom drawing function for the game.
+         */
+        function drawGame() {
+            // Clear canvas
+            ctx.clearRect(0, 0, gameWidth, gameHeight);
+
+            // Draw background (procedural gradient or pattern)
+            drawBackground();
+
+            // Render Matter.js bodies
+            Render.world(render);
+
+            // Draw game elements (paddle, ball, bricks) with custom styles
+            // Matter.js's Render.world already draws bodies, but we can override or add effects.
+            // For this version, we rely on Matter.js's default rendering with fillStyle.
+
+            requestAnimationFrame(drawGame);
+        }
+
+        /**
+         * Draws the procedural background based on the current stage and palette.
+         */
+        function drawBackground() {
+            if (!currentPalette) return;
+
+            // Simple gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, gameHeight);
+            gradient.addColorStop(0, currentPalette.background[0]);
+            gradient.addColorStop(1, currentPalette.background[1]);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, gameWidth, gameHeight);
+
+            // Add subtle geometric pattern based on stage
+            ctx.save();
+            ctx.globalAlpha = 0.1; // Make pattern very subtle
+
+            switch (currentStage % 4) { // Cycle through a few patterns
+                case 0: // Expanding circles
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 2;
+                    for (let i = 0; i < 5; i++) {
+                        ctx.beginPath();
+                        ctx.arc(gameWidth / 2, gameHeight / 2, 50 + i * 80, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                    break;
+                case 1: // Diagonal lines
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 1;
+                    for (let i = -gameHeight; i < gameWidth + gameHeight; i += 50) {
+                        ctx.beginPath();
+                        ctx.moveTo(i, 0);
+                        ctx.lineTo(i + gameHeight, gameHeight);
+                        ctx.stroke();
+                    }
+                    break;
+                case 2: // Grid
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 1;
+                    for (let x = 0; x < gameWidth; x += 60) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, 0);
+                        ctx.lineTo(x, gameHeight);
+                        ctx.stroke();
+                    }
+                    for (let y = 0; y < gameHeight; y += 60) {
+                        ctx.beginPath();
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(gameWidth, y);
+                        ctx.stroke();
+                    }
+                    break;
+                case 3: // Concentric squares
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 2;
+                    const minDim = Math.min(gameWidth, gameHeight);
+                    for (let i = 0; i < 5; i++) {
+                        const size = minDim * 0.1 + i * (minDim * 0.1);
+                        ctx.beginPath();
+                        ctx.rect((gameWidth - size) / 2, (gameHeight - size) / 2, size, size);
+                        ctx.stroke();
+                    }
+                    break;
+            }
+            ctx.restore();
+        }
+
+
+        /**
+         * Shows the start screen.
+         */
+        function showStartScreen() {
+            startScreen.classList.add('active');
+            gameOverScreen.classList.remove('active');
+            highScoreStart.textContent = highScore;
+        }
+
+        /**
+         * Shows the game over screen.
+         */
+        function showGameOverScreen() {
+            gameOverScreen.classList.add('active');
+            startScreen.classList.remove('active');
+        }
+
+        /**
+         * Hides all game screens (start, game over).
+         */
+        function hideScreens() {
+            startScreen.classList.remove('active');
+            gameOverScreen.classList.remove('active');
+        }
+
+        /**
+         * Launches the ball from the paddle.
+         */
+        function launchBall() {
+            if (!ballLaunched && gameRunning) {
+                // Give the ball an initial upward velocity
+                Body.setVelocity(ball, { x: 0, y: -currentBallSpeed });
+                ballLaunched = true;
+            }
+        }
+
+        // Event Listeners
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', resetGame); // Go back to start screen for restart
+
+        // Touch controls for paddle
+        let isDraggingPaddle = false;
+        let touchStartX = 0;
+        let paddleStartX = 0;
+
+        leverControl.addEventListener('touchstart', (e) => {
+            if (!gameRunning) return;
+            isDraggingPaddle = true;
+            touchStartX = e.touches[0].clientX;
+            paddleStartX = paddle.position.x;
+
+            // If ball not launched, launch it on first touch
+            if (!ballLaunched) {
+                launchBall();
+            }
+        }, { passive: true }); // Use passive to improve scrolling performance (though touch-action: none should prevent it)
+
+        leverControl.addEventListener('touchmove', (e) => {
+            if (!isDraggingPaddle || !gameRunning) return;
+            const touchCurrentX = e.touches[0].clientX;
+            const deltaX = touchCurrentX - touchStartX;
+            let newX = paddleStartX + deltaX;
+
+            // Clamp paddle position within canvas bounds
+            const halfPaddleWidth = paddle.bounds.max.x - paddle.position.x;
+            newX = Math.max(halfPaddleWidth, Math.min(gameWidth - halfPaddleWidth, newX));
+
+            Body.setPosition(paddle, { x: newX, y: paddle.position.y });
+
+            // If ball is not launched, keep it centered on the paddle
+            if (!ballLaunched) {
+                Body.setPosition(ball, { x: newX, y: paddle.position.y - BALL_RADIUS - 5 });
+            }
+        }, { passive: true });
+
+        leverControl.addEventListener('touchend', () => {
+            isDraggingPaddle = false;
+        });
+
+        // Initialize the game when the window loads
+        window.onload = function() {
+            initGame();
+            showStartScreen(); // Show start screen initially
+        };
+
+        // Handle window resize to adjust canvas dimensions
+        window.addEventListener('resize', () => {
+            const gameContainer = document.querySelector('.game-container');
+            gameWidth = gameContainer.clientWidth;
+            gameHeight = gameContainer.clientHeight;
+            canvas.width = gameWidth;
+            canvas.height = gameHeight;
+
+            // Re-render Matter.js renderer with new dimensions
+            render.options.width = gameWidth;
+            render.options.height = gameHeight;
+            Render.set
+            // Re-position walls and ground
+            Body.setPosition(walls[0], { x: gameWidth / 2, y: -10 }); // Top
+            Body.setPosition(walls[1], { x: -10, y: gameHeight / 2 }); // Left
+            Body.setPosition(walls[2], { x: gameWidth + 10, y: gameHeight / 2 }); // Right
+            Body.setPosition(ground, { x: gameWidth / 2, y: gameHeight + 50 }); // Ground
+
+            // Re-position paddle and ball if game is running
+            if (gameRunning && paddle && ball) {
+                const paddleWidth = gameWidth * PADDLE_WIDTH_RATIO;
+                Body.setVertices(paddle, Bodies.rectangle(0, 0, paddleWidth, PADDLE_HEIGHT).vertices); // Update paddle width
+                Body.setPosition(paddle, { x: gameWidth / 2, y: gameHeight - PADDLE_HEIGHT * 2 });
+                Body.setPosition(ball, { x: gameWidth / 2, y: paddle.position.y - BALL_RADIUS - 5 });
+            }
+
+            // Regenerate bricks if needed (or just ensure they are within new bounds)
+            // For simplicity, we won't regenerate bricks on resize mid-game,
+            // but a full restart would be needed for perfect scaling.
+        });
+
+    </script>
+</body>
+</html>
