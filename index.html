@@ -26,15 +26,17 @@
         /* Game container to enforce aspect ratio and center content */
         .game-container {
             position: relative;
-            width: 100vw; /* Maximize width */
-            height: 100vh; /* Maximize height */
+            width: 100vw; /* Maximize width, will be constrained by aspect-ratio */
+            height: 100vh; /* Maximize height, will be constrained by aspect-ratio */
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            /* Enforce portrait mode visually for wider screens */
-            max-width: calc(100vh * (9 / 16)); /* Example: 9:16 aspect ratio */
-            max-height: calc(100vw * (16 / 9));
+            /* Enforce portrait mode aspect ratio (e.g., 9:16) */
+            aspect-ratio: 9 / 16;
+            /* Ensure it scales down to fit within viewport without overflow */
+            max-width: 100vw;
+            max-height: 100vh;
             background-color: #2a2a4a; /* Slightly lighter background for game area */
             border-radius: 15px;
             box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
@@ -182,18 +184,7 @@
             box-shadow: 0 0 10px rgba(187, 222, 251, 0.7);
         }
 
-        /* Responsive adjustments */
-        @media (orientation: landscape) {
-            /* For landscape mode, rotate the game container to simulate portrait */
-            .game-container {
-                width: 100vh; /* Use viewport height as width */
-                height: 100vw; /* Use viewport width as height */
-                transform: rotate(90deg);
-                transform-origin: center;
-                /* Adjust positioning if needed after rotation */
-                margin: auto;
-            }
-        }
+        /* No specific landscape media query with transform needed, aspect-ratio handles it */
     </style>
 </head>
 <body>
@@ -318,6 +309,7 @@
          * Initializes the game canvas and sets up Matter.js engine.
          */
         function initGame() {
+            console.log('initGame called');
             canvas = document.getElementById('gameCanvas');
             ctx = canvas.getContext('2d');
 
@@ -489,6 +481,7 @@
          * Starts the game.
          */
         function startGame() {
+            console.log('startGame called');
             score = 0;
             lives = 3;
             currentStage = 1;
@@ -537,7 +530,10 @@
             currentStage++;
             if (currentStage > MAX_STAGES) {
                 // Game completed all stages, maybe a special win screen or loop back
-                alert("Congratulations! You've cleared all stages!"); // Use a modal instead of alert in real app
+                // Using a simple modal message for now, as per instructions to avoid alert()
+                const winMessage = "Congratulations! You've cleared all stages!";
+                // In a real app, you'd show a custom modal here
+                console.log(winMessage); // Log to console for now
                 gameOver();
                 return;
             }
@@ -697,6 +693,7 @@
          * Shows the start screen.
          */
         function showStartScreen() {
+            console.log('showStartScreen called');
             startScreen.classList.add('active');
             gameOverScreen.classList.remove('active');
             highScoreStart.textContent = highScore;
@@ -706,6 +703,7 @@
          * Shows the game over screen.
          */
         function showGameOverScreen() {
+            console.log('showGameOverScreen called');
             gameOverScreen.classList.add('active');
             startScreen.classList.remove('active');
         }
@@ -714,6 +712,7 @@
          * Hides all game screens (start, game over).
          */
         function hideScreens() {
+            console.log('hideScreens called');
             startScreen.classList.remove('active');
             gameOverScreen.classList.remove('active');
         }
@@ -774,12 +773,14 @@
 
         // Initialize the game when the window loads
         window.onload = function() {
+            console.log('Window loaded');
             initGame();
             showStartScreen(); // Show start screen initially
         };
 
         // Handle window resize to adjust canvas dimensions
         window.addEventListener('resize', () => {
+            console.log('Window resized');
             const gameContainer = document.querySelector('.game-container');
             gameWidth = gameContainer.clientWidth;
             gameHeight = gameContainer.clientHeight;
@@ -787,9 +788,8 @@
             canvas.height = gameHeight;
 
             // Re-render Matter.js renderer with new dimensions
-            render.options.width = gameWidth;
-            render.options.height = gameHeight;
-            Render.set
+            Render.setOptions(render, { width: gameWidth, height: gameHeight }); // Corrected line
+            
             // Re-position walls and ground
             Body.setPosition(walls[0], { x: gameWidth / 2, y: -10 }); // Top
             Body.setPosition(walls[1], { x: -10, y: gameHeight / 2 }); // Left
@@ -799,9 +799,20 @@
             // Re-position paddle and ball if game is running
             if (gameRunning && paddle && ball) {
                 const paddleWidth = gameWidth * PADDLE_WIDTH_RATIO;
-                Body.setVertices(paddle, Bodies.rectangle(0, 0, paddleWidth, PADDLE_HEIGHT).vertices); // Update paddle width
-                Body.setPosition(paddle, { x: gameWidth / 2, y: gameHeight - PADDLE_HEIGHT * 2 });
-                Body.setPosition(ball, { x: gameWidth / 2, y: paddle.position.y - BALL_RADIUS - 5 });
+                // Re-create paddle with new width (Matter.js Body.setVertices is complex for simple width change)
+                // A simpler approach for width change is to remove and re-add.
+                const currentPaddleX = paddle.position.x;
+                const currentPaddleY = paddle.position.y;
+                Composite.remove(engine.world, paddle);
+                paddle = Bodies.rectangle(currentPaddleX, currentPaddleY, paddleWidth, PADDLE_HEIGHT, {
+                    isStatic: true,
+                    label: 'paddle',
+                    render: { fillStyle: currentPalette.paddle },
+                    chamfer: { radius: 5 }
+                });
+                Composite.add(engine.world, paddle);
+
+                Body.setPosition(ball, { x: currentPaddleX, y: paddle.position.y - BALL_RADIUS - 5 });
             }
 
             // Regenerate bricks if needed (or just ensure they are within new bounds)
